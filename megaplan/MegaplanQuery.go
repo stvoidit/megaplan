@@ -19,9 +19,9 @@ type APIresponse struct {
 }
 
 // GET - GET Запрос к API
-func GET(domain string, acessid string, secretkey string, uri string, pyload map[string]string) APIresponse {
+func GET(domain string, acessid string, secretkey string, uri string, pyload map[string]string, class interface{}) APIresponse {
 	urlQuery, queryHeader := queryHasher(domain, acessid, secretkey, "GET", uri, pyload)
-	responseAPI := requestQuery(urlQuery, queryHeader)
+	responseAPI := requestQuery(urlQuery, queryHeader, class)
 	return responseAPI
 }
 
@@ -52,7 +52,8 @@ func queryHasher(d string, a string, s string, r string, uri string, payload map
 }
 
 // requestQuery - непосредственно сам запрос к API
-func requestQuery(url url.URL, h http.Header) APIresponse {
+// В аргумент class передается экземпляр структуры в которую будут записаны данные Unmarshal
+func requestQuery(url url.URL, h http.Header, class interface{}) APIresponse {
 	req, _ := http.NewRequest("GET", url.String(), nil)
 	req.Header = h
 	client := http.Client{}
@@ -60,5 +61,6 @@ func requestQuery(url url.URL, h http.Header) APIresponse {
 	body, _ := ioutil.ReadAll(resp.Body)
 	myResponse := APIresponse{}
 	json.Unmarshal(body, &myResponse)
+	json.Unmarshal(body, &class)
 	return myResponse
 }
