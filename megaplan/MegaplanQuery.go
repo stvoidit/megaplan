@@ -1,5 +1,7 @@
 package megaplan
 
+// v1.2
+
 import (
 	"crypto/hmac"
 	"crypto/sha1"

@@ -1,6 +1,6 @@
 package megaplan
 
-// v1
+// v1.1
 
 import (
 	"crypto/md5"
@@ -15,17 +15,13 @@ import (
 )
 
 // Token - Получение токена API
-func Token(login string, password string, proto string, host string) (string, string, error) {
-	type AuthData struct {
-		Login, Password, Proto, Host string
-	}
-	UserData := AuthData{login, password, proto, host}
-	md5p := md5Passord(UserData.Password)
-	OTCkey, err := getOTC(UserData.Proto+UserData.Host, UserData.Login, md5p)
+func Token(login string, password string, domain string) (string, string, error) {
+	md5p := md5Passord(password)
+	OTCkey, err := getOTC(domain, login, md5p)
 	if err != nil {
 		panic(err.Error())
 	}
-	AID, Skey, err := getToken(UserData.Proto+UserData.Host, UserData.Login, md5p, OTCkey)
+	AID, Skey, err := getToken(domain, login, md5p, OTCkey)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -76,7 +72,7 @@ func getOTC(domain string, login string, md5password string) (string, error) {
 	return OTCdata.Data.OneTimeKey, nil
 }
 
-// GETkey - AccessId, SecretKey
+// getToken - AccessId, SecretKey
 func getToken(domain string, login string, md5password string, otc string) (string, string, error) {
 	const uriToken = "/BumsCommonApiV01/User/authorize.api"
 	payload := url.Values{}
@@ -94,7 +90,6 @@ func getToken(domain string, login string, md5password string, otc string) (stri
 			Code    string
 			Message string
 		}
-
 		Data struct {
 			UserID       int
 			EmployeeID   int
