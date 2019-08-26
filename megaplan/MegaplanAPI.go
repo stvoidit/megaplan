@@ -56,12 +56,12 @@ func getOTC(domain string, login string, md5password string) (string, error) {
 	}
 	OTCdata := new(struct {
 		Status struct {
-			Code    string
-			Message string
-		}
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"status"`
 		Data struct {
-			OneTimeKey string
-		}
+			OneTimeKey string `json:"OneTimeKey"`
+		} `json:"data"`
 	})
 	json.Unmarshal(body, &OTCdata)
 	if OTCdata.Data.OneTimeKey == "" {
@@ -87,16 +87,16 @@ func getToken(domain string, login string, md5password string, otc string) (stri
 	body, _ := ioutil.ReadAll(resp.Body)
 	AccessToken := new(struct {
 		Status struct {
-			Code    string
-			Message string
-		}
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"status"`
 		Data struct {
-			UserID       int
-			EmployeeID   int
-			ContractorID string
-			AccessID     string
-			SecretKey    string
-		}
+			UserID       int    `json:"UserId"`
+			EmployeeID   int    `json:"EmployeeId"`
+			ContractorID string `json:"ContractorId"`
+			AccessID     string `json:"AccessId"`
+			SecretKey    string `json:"SecretKey"`
+		} `json:"data"`
 	})
 	json.Unmarshal(body, &AccessToken)
 	if AccessToken.Data.AccessID == "" || AccessToken.Data.SecretKey == "" {
