@@ -12,23 +12,36 @@ import (
 	"time"
 )
 
-// APIresponse - Ответ API, json
+// APIresponse - ответ API, json
 type APIresponse struct {
 	Status map[string]string
 	Data   map[string]interface{}
 }
 
-// GET - GET Запрос к API
+// GET - get запрос к API
 func GET(domain string, acessid string, secretkey string, uri string, pyload map[string]string, class interface{}) APIresponse {
-	urlQuery, queryHeader := queryHasher(domain, acessid, secretkey, "GET", uri, pyload)
-	responseAPI := requestQuery(urlQuery, queryHeader, class)
+	const rMethod = "GET"
+	urlQuery, queryHeader := queryHasher(domain, acessid, secretkey, rMethod, uri, pyload)
+	responseAPI := requestQuery(rMethod, urlQuery, queryHeader, class)
 	return responseAPI
 }
 
-// queryHasher - Задает сигнатуру, отдает Header для запросов к API
-func queryHasher(d string, a string, s string, r string, uri string, payload map[string]string) (url.URL, http.Header) {
+// POST - post запрос на API
+func POST(domain string, acessid string, secretkey string, uri string, pyload map[string]string, class interface{}) APIresponse {
+	const rMethod = "POST"
+	urlQuery, queryHeader := queryHasher(domain, acessid, secretkey, rMethod, uri, pyload)
+	responseAPI := requestQuery(rMethod, urlQuery, queryHeader, class)
+	return responseAPI
+
+}
+
+// queryHasher - задаем сигнатуру, отдает URL и Header для запросов к API
+func queryHasher(domain string, acessid string, secretkey string, method string, uri string, payload map[string]string) (url.URL, http.Header) {
 	const rfc2822 = "Mon, 02 Jan 2006 15:04:05 -0700"
-	URL, _ := url.Parse(d)
+	URL, err := url.Parse(domain)
+	if err != nil {
+		panic(err.Error())
+	}
 	URL.Path += uri
 	today := time.Now().Format(rfc2822)
 	urlParams := url.Values{}
@@ -36,14 +49,14 @@ func queryHasher(d string, a string, s string, r string, uri string, payload map
 		urlParams.Add(k, v)
 	}
 	URL.RawQuery = urlParams.Encode()
-	Signature := r + "\n\n" + "application/x-www-form-urlencoded" + "\n" + today + "\n" + URL.Host + URL.Path + "?" + URL.RawQuery
-	h := hmac.New(sha1.New, []byte(s))
+	Signature := method + "\n\n" + "application/x-www-form-urlencoded" + "\n" + today + "\n" + URL.Host + URL.Path + "?" + URL.RawQuery
+	h := hmac.New(sha1.New, []byte(secretkey))
 	h.Write([]byte(Signature))
 	hexSha1 := hex.EncodeToString(h.Sum(nil))
 	sha1Query := base64.StdEncoding.EncodeToString([]byte(hexSha1))
 	queryHeader := http.Header{
 		"Date":            []string{today},
-		"X-Authorization": []string{a + ":" + sha1Query},
+		"X-Authorization": []string{acessid + ":" + sha1Query},
 		"Accept":          []string{"application/json"},
 		"Content-Type":    []string{"application/x-www-form-urlencoded"},
 		"accept-encoding": []string{"gzip, deflate, br"},
@@ -53,14 +66,25 @@ func queryHasher(d string, a string, s string, r string, uri string, payload map
 
 // requestQuery - непосредственно сам запрос к API
 // В аргумент class передается экземпляр структуры в которую будут записаны данные Unmarshal
-func requestQuery(url url.URL, h http.Header, class interface{}) APIresponse {
-	req, _ := http.NewRequest("GET", url.String(), nil)
-	req.Header = h
+func requestQuery(method string, url url.URL, headers http.Header, class interface{}) APIresponse {
+	req, err := http.NewRequest(method, url.String(), nil)
+	if err != nil {
+		panic(err.Error())
+	}
+	req.Header = headers
 	client := http.Client{}
-	resp, _ := client.Do(req)
-	body, _ := ioutil.ReadAll(resp.Body)
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err.Error())
+	}
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err.Error())
+	}
 	myResponse := APIresponse{}
 	json.Unmarshal(body, &myResponse)
-	json.Unmarshal(body, &class)
+	if class != nil {
+		json.Unmarshal(body, &class)
+	}
 	return myResponse
 }
