@@ -85,10 +85,10 @@ type TaskCard struct {
 		ID   string `json:"Id"`
 		Name string `json:"Name"`
 	} `json:"Auditors"`
-	PlannedWork            int64  `json:"PlannedWork"`
+	PlannedWork            string `json:"PlannedWork"`
 	PlannedFinish          string `json:"PlannedFinish"`
-	ActualWork             int64  `json:"ActualWork"`
-	ActualWorkWithSubTasks int64  `json:"ActualWorkWithSubTasks"`
+	ActualWork             string `json:"ActualWork"`
+	ActualWorkWithSubTasks string `json:"ActualWorkWithSubTasks"`
 	IsOverdue              bool   `json:"IsOverdue"`
 }
 
