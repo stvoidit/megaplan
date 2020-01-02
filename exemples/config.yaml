@@ -1,0 +1,8 @@
+megaplan:
+  access_id: "" # Ключ пользователя
+  secret_key: "" # Ключ пользователя
+  appUUID: "" # Ключ для встроенного приложения
+  appSecret: "" # Ключ для встроенного приложения
+  login: "Admin"
+  password: "Admin"
+  domain: "https://exemple.ru"
