@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"net/http"
+	"time"
 
 	mp "github.com/stvoidit/MegaplanGO"
 )
@@ -10,7 +12,9 @@ var api mp.API
 
 // Инициаолизация экземпляра API
 func init() {
-	api.ParseConfig("config.yaml")
+	tr := http.Transport{IdleConnTimeout: 1 * time.Minute}
+	c := &http.Client{Timeout: 1 * time.Minute, Transport: &tr}
+	api.ParseConfig("config.yaml", c)
 }
 
 // Получение токена - accessID и secretKey

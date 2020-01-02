@@ -3,7 +3,6 @@ package megaplan
 import (
 	"io/ioutil"
 	"net/http"
-	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -46,7 +45,7 @@ type API struct {
 }
 
 // ParseConfig - Сразу инициализирует API с указанием пути к файлу-конфигу
-func (api *API) ParseConfig(path string) {
+func (api *API) ParseConfig(path string, client *http.Client) {
 	var c Config
 	c.ParseConfig(path)
 	api.AccessID = c.Megaplan.AccessID
@@ -55,7 +54,7 @@ func (api *API) ParseConfig(path string) {
 	api.login = c.Megaplan.Login
 	api.password = c.Megaplan.Password
 	api.AppUUID = c.Megaplan.AppUUID
-	api.client = &http.Client{Timeout: 1 * time.Minute}
+	api.client = client
 	api.AppSecret = []byte(c.Megaplan.AppSecret)
 }
 
