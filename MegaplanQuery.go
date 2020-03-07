@@ -8,8 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -20,14 +18,14 @@ import (
 const rfc2822 = "Mon, 02 Jan 2006 15:04:05 -0700"
 
 // GET - get запрос к API
-func (api *API) GET(uri string, payload interface{}) []byte {
+func (api *API) GET(uri string, payload map[string]interface{}) *ResponseBuffer {
 	const rMethod = "GET"
 	urlQuery, queryHeader := api.queryHasher(rMethod, uri, payload)
 	return api.requestQuery(rMethod, urlQuery, queryHeader)
 }
 
 // POST - post запрос на API
-func (api *API) POST(uri string, payload interface{}) []byte {
+func (api *API) POST(uri string, payload map[string]interface{}) *ResponseBuffer {
 	const rMethod = "POST"
 	urlQuery, queryHeader := api.queryHasher(rMethod, uri, payload)
 	return api.requestQuery(rMethod, urlQuery, queryHeader)
@@ -37,15 +35,15 @@ func (api *API) POST(uri string, payload interface{}) []byte {
 func (api *API) CheckUser(userSign string) (UserAppVerification, error) {
 	var appAPI API
 	appAPI = *api
-	appAPI.AccessID = api.AppUUID
-	appAPI.SecretKey = api.AppSecret
-	var payload = map[string]string{
-		"uuid":     api.AppUUID,
+	appAPI.accessID = api.appUUID
+	appAPI.secretKey = api.appSecret
+	var payload = map[string]interface{}{
+		"uuid":     api.appUUID,
 		"userSign": userSign,
 	}
 	b := appAPI.POST("/BumsSettingsApiV01/Application/checkUserSign.json", payload)
 	var i UserVerifyResponse
-	if err := json.Unmarshal(b, &i); err != nil {
+	if err := json.NewDecoder(b).Decode(&i); err != nil {
 		return i.Data, err
 	}
 	if i.response.Status.Code != "ok" {
@@ -55,29 +53,25 @@ func (api *API) CheckUser(userSign string) (UserAppVerification, error) {
 }
 
 // queryHasher - задаем сигнатуру, отдает URL и Header для запросов к API
-func (api *API) queryHasher(method string, uri string, payload interface{}) (url.URL, http.Header) {
+func (api *API) queryHasher(method string, uri string, payload map[string]interface{}) (url.URL, http.Header) {
 	var normalizePayload = make(map[string]string)
-	switch p := payload.(type) {
-	case map[string]string:
-		normalizePayload = p
-	case map[string]int:
-		for k, v := range p {
-			normalizePayload[k] = strconv.Itoa(v)
+	for k, val := range payload {
+		switch t := val.(type) {
+		case int, int64:
+			normalizePayload[k] = strconv.Itoa(t.(int))
+		case uint, uint64:
+			normalizePayload[k] = strconv.FormatUint(t.(uint64), 64)
+		case bool:
+			normalizePayload[k] = strconv.FormatBool(t)
+		case string:
+			normalizePayload[k] = t
+		case nil:
+			continue
+		default:
+			fmt.Println("unrecognized type", t)
 		}
-	case map[string]int64:
-		for k, v := range p {
-			normalizePayload[k] = strconv.FormatInt(v, 10)
-		}
-	case map[string]bool:
-		for k, v := range p {
-			normalizePayload[k] = strconv.FormatBool(v)
-		}
-	case nil:
-		break
-	default:
-		log.Fatalln(errors.New("cant parse paylaod interface"))
 	}
-	URL, err := url.Parse(api.Domain)
+	URL, err := url.Parse(api.config.Megaplan.Domain)
 	if err != nil {
 		panic(err.Error())
 	}
@@ -92,13 +86,13 @@ func (api *API) queryHasher(method string, uri string, payload interface{}) (url
 	}
 	sigURL := strings.Replace(URL.String(), fmt.Sprintf("%s://", URL.Scheme), "", 1)
 	Signature := fmt.Sprintf("%s\n\napplication/x-www-form-urlencoded\n%s\n%s", method, today, sigURL)
-	h := hmac.New(sha1.New, api.SecretKey)
+	h := hmac.New(sha1.New, api.secretKey)
 	h.Write([]byte(Signature))
 	hexSha1 := hex.EncodeToString(h.Sum(nil))
 	sha1Query := base64.StdEncoding.EncodeToString([]byte(hexSha1))
 	queryHeader := http.Header{
 		"Date":            []string{today},
-		"X-Authorization": []string{api.AccessID + ":" + sha1Query},
+		"X-Authorization": []string{api.accessID + ":" + sha1Query},
 		"Accept":          []string{"application/json"},
 		"Content-Type":    []string{"application/x-www-form-urlencoded"},
 		"accept-encoding": []string{"gzip, deflate, br"},
@@ -107,7 +101,7 @@ func (api *API) queryHasher(method string, uri string, payload interface{}) (url
 }
 
 // requestQuery - итоговый запрос к API предварительно сформированный Request с правильным набором headers
-func (api *API) requestQuery(method string, url url.URL, headers http.Header) []byte {
+func (api *API) requestQuery(method string, url url.URL, headers http.Header) *ResponseBuffer {
 	req, err := http.NewRequest(method, url.String(), nil)
 	if err != nil {
 		panic(err.Error())
@@ -117,10 +111,10 @@ func (api *API) requestQuery(method string, url url.URL, headers http.Header) []
 	if err != nil {
 		panic(err.Error())
 	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		panic(err.Error())
+	var buff = new(ResponseBuffer)
+	if _, err := buff.ReadFrom(resp.Body); err != nil {
+		panic(err)
 	}
-	defer resp.Body.Close()
-	return body
+	resp.Body.Close()
+	return buff
 }

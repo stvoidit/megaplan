@@ -4,9 +4,6 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
@@ -23,35 +20,29 @@ func md5Passord(p string) string {
 // getOTC - получение временного ключа
 func getOTC(domain string, login string, md5password string) (string, error) {
 	const uriOTC = "/BumsCommonApiV01/User/createOneTimeKeyAuth.api"
-	payload := url.Values{}
+	var payload = url.Values{}
 	payload.Add("Login", login)
 	payload.Add("Password", md5password)
 	req, _ := http.NewRequest("POST", domain+uriOTC, strings.NewReader(payload.Encode()))
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	client := &http.Client{}
+	var client = &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-	OTCdata := new(struct {
-		Status struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
-		} `json:"status"`
+	defer resp.Body.Close()
+	var OTCdata = new(struct {
+		response
 		Data struct {
 			OneTimeKey string `json:"OneTimeKey"`
 		} `json:"data"`
 	})
-	json.Unmarshal(body, &OTCdata)
-	if OTCdata.Data.OneTimeKey == "" {
-		errMessage := fmt.Sprintf("Не корректный логин или пароль (%s)", OTCdata.Status.Message)
-		myerror := errors.New(errMessage)
-		return "", myerror
+	if err := json.NewDecoder(resp.Body).Decode(OTCdata); err != nil {
+		return "", err
+	}
+	if err := OTCdata.response.IFerror(); err != nil {
+		return "", err
 	}
 	return OTCdata.Data.OneTimeKey, nil
 }
@@ -59,7 +50,7 @@ func getOTC(domain string, login string, md5password string) (string, error) {
 // getToken - AccessId, SecretKey
 func getToken(domain string, login string, md5password string, otc string) (string, string, error) {
 	const uriToken = "/BumsCommonApiV01/User/authorize.api"
-	payload := url.Values{}
+	var payload = url.Values{}
 	payload.Add("Login", login)
 	payload.Add("Password", md5password)
 	payload.Add("OneTimeKey", otc)
@@ -67,13 +58,13 @@ func getToken(domain string, login string, md5password string, otc string) (stri
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	client := &http.Client{}
-	resp, _ := client.Do(req)
-	body, _ := ioutil.ReadAll(resp.Body)
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
 	AccessToken := new(struct {
-		Status struct {
-			Code    string `json:"code"`
-			Message string `json:"message"`
-		} `json:"status"`
+		response
 		Data struct {
 			UserID       int    `json:"UserId"`
 			EmployeeID   int    `json:"EmployeeId"`
@@ -82,11 +73,11 @@ func getToken(domain string, login string, md5password string, otc string) (stri
 			SecretKey    string `json:"SecretKey"`
 		} `json:"data"`
 	})
-	json.Unmarshal(body, &AccessToken)
-	if AccessToken.Data.AccessID == "" || AccessToken.Data.SecretKey == "" {
-		errMessage := fmt.Sprintf("Не корректный логин или пароль, токен доступа не получен (%s)", AccessToken.Status.Message)
-		myerror := errors.New(errMessage)
-		return "", "", myerror
+	if err := json.NewDecoder(resp.Body).Decode(AccessToken); err != nil {
+		return "", "", err
+	}
+	if err := AccessToken.response.IFerror(); err != nil {
+		return "", "", err
 	}
 	return AccessToken.Data.AccessID, AccessToken.Data.SecretKey, nil
 }

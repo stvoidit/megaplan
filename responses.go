@@ -1,8 +1,10 @@
 package megaplan
 
-import "errors"
-
-// Дефолтные структуры ответов от API
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+)
 
 type response struct {
 	Status struct {
@@ -18,25 +20,38 @@ func (r *response) IFerror() error {
 	return nil
 }
 
-type userResponse struct {
-	response
-	Data map[string]EmployeeCard `json:"data"`
+// ResponseBuffer - ответ от API
+type ResponseBuffer struct {
+	bytes.Buffer
 }
-type responseEmployeeList struct {
+
+type semiResponse struct {
 	response
-	Data map[string][]EmployeeCard `json:"data"`
+	Data map[string]interface{} `json:"data"`
 }
-type taskListResponse struct {
-	response
-	Data map[string][]TaskCard `json:"data"`
-}
-type tagListResponse struct {
-	response
-	Data map[string][]Tag `json:"data"`
-}
-type commentListResponse struct {
-	response
-	Data map[string]CommentsList `json:"data"`
+
+// Scan - парсинг структуры
+func (rb *ResponseBuffer) Scan(i interface{}) error {
+	var res = new(semiResponse)
+	if err := json.NewDecoder(rb).Decode(&res); err != nil {
+		return err
+	}
+	if err := res.IFerror(); err != nil {
+		return err
+	}
+	for _, v := range res.Data {
+		var buff = new(bytes.Buffer)
+		var dec = json.NewDecoder(buff)
+		if err := json.NewEncoder(buff).Encode(&v); err != nil {
+			return err
+		}
+		if err := dec.Decode(i); err != nil {
+			return err
+		}
+		buff.Reset()
+		break
+	}
+	return nil
 }
 
 // UserVerifyResponse - тип для верификации юзеров во встроенном приложении

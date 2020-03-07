@@ -1,11 +1,18 @@
 package megaplan
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"gopkg.in/yaml.v3"
 )
+
+// APIWithConfig - инициализация экземпляра из файла конфигурации
+func APIWithConfig(file io.ReadSeeker) *API {
+	var api = new(API)
+	api.ReadConfig(file)
+	return api
+}
 
 // Config - формат конфига для API мегаплан
 type Config struct {
@@ -20,56 +27,51 @@ type Config struct {
 	} `yaml:"megaplan"`
 }
 
-// ParseConfig - парсинг файла по указанному пути, создание конфига
-func (c *Config) ParseConfig(path string) error {
-	yamlFile, err := ioutil.ReadFile(path)
-	if err != nil {
-		return err
+// ReadConfig - парсинг файла по указанному пути, создание конфига
+func (c *Config) ReadConfig(file io.ReadSeeker) {
+	file.Seek(0, 0)
+	if err := yaml.NewDecoder(file).Decode(&c); err != nil {
+		panic(err)
 	}
-	if err := yaml.Unmarshal(yamlFile, &c); err != nil {
-		return err
-	}
-	return nil
 }
 
 // API - Структура объекта API v1
 type API struct {
-	AccessID  string
-	SecretKey []byte
-	Domain    string
-	login     string
-	password  string
-	AppUUID   string
-	AppSecret []byte
+	config    *Config
+	accessID  string
+	secretKey []byte
+	domain    string
+	appUUID   string
+	appSecret []byte
 	client    *http.Client
 }
 
-// ParseConfig - Сразу инициализирует API с указанием пути к файлу-конфигу
-func (api *API) ParseConfig(path string, client *http.Client) {
-	var c Config
-	c.ParseConfig(path)
-	api.AccessID = c.Megaplan.AccessID
-	api.SecretKey = []byte(c.Megaplan.SecretKey)
-	api.Domain = c.Megaplan.Domain
-	api.login = c.Megaplan.Login
-	api.password = c.Megaplan.Password
-	api.AppUUID = c.Megaplan.AppUUID
-	api.client = client
-	api.AppSecret = []byte(c.Megaplan.AppSecret)
+// ReadConfig - Сразу инициализирует API с указанием пути к файлу-конфигу
+func (api *API) ReadConfig(file io.ReadSeeker) {
+	var cnf = new(Config)
+	cnf.ReadConfig(file)
+	api.config = cnf
+	api.client = new(http.Client)
+	api.accessID = cnf.Megaplan.AccessID
+	api.secretKey = []byte(cnf.Megaplan.SecretKey)
+	api.domain = cnf.Megaplan.Domain
+	api.appUUID = cnf.Megaplan.AppUUID
+	api.appSecret = []byte(cnf.Megaplan.AppSecret)
 }
 
 // GetToken - Получение токена API
-func (api *API) GetToken() error {
-	md5p := md5Passord(api.password)
-	OTCkey, err := getOTC(api.Domain, api.login, md5p)
-	if err != nil {
-		panic(err.Error())
-	}
-	AID, Skey, err := getToken(api.Domain, api.login, md5p, OTCkey)
+func (api *API) GetToken(domain, login, password string) error {
+	md5p := md5Passord(password)
+	OTCkey, err := getOTC(domain, login, md5p)
 	if err != nil {
 		return err
 	}
-	api.AccessID = AID
-	api.SecretKey = []byte(Skey)
+	AID, Skey, err := getToken(domain, login, md5p, OTCkey)
+	if err != nil {
+		return err
+	}
+	api.accessID = AID
+	api.secretKey = []byte(Skey)
+	api.domain = domain
 	return nil
 }
