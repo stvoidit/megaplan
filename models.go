@@ -46,12 +46,9 @@ type TaskCard struct {
 	TimeCreated string `json:"TimeCreated"`
 	TimeUpdated string `json:"TimeUpdated"`
 	Finish      string `json:"Finish"`
-	Tags        []struct {
-		ID   string `json:"Id"`
-		Name string `json:"Name"`
-	} `json:"Tags"`
-	Statement string `json:"Statement"`
-	Auditors  []struct {
+	Tags        []Tag  `json:"Tags"`
+	Statement   string `json:"Statement"`
+	Auditors    []struct {
 		ID   string `json:"Id"`
 		Name string `json:"Name"`
 	} `json:"Auditors"`
