@@ -33,7 +33,9 @@ type semiResponse struct {
 // Scan - парсинг структуры
 func (rb *ResponseBuffer) Scan(i interface{}) error {
 	var res = new(semiResponse)
-	if err := json.NewDecoder(rb).Decode(&res); err != nil {
+	var dec = json.NewDecoder(rb)
+	dec.UseNumber()
+	if err := dec.Decode(&res); err != nil {
 		return err
 	}
 	if err := res.IFerror(); err != nil {
@@ -42,14 +44,13 @@ func (rb *ResponseBuffer) Scan(i interface{}) error {
 	for _, v := range res.Data {
 		var buff = new(bytes.Buffer)
 		var dec = json.NewDecoder(buff)
+		dec.UseNumber()
 		if err := json.NewEncoder(buff).Encode(&v); err != nil {
 			return err
 		}
-		if err := dec.Decode(i); err != nil {
-			return err
+		if err := dec.Decode(i); err == nil {
+			break
 		}
-		buff.Reset()
-		break
 	}
 	return nil
 }
