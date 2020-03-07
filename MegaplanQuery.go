@@ -57,10 +57,8 @@ func (api *API) queryHasher(method string, uri string, payload map[string]interf
 	var normalizePayload = make(map[string]string)
 	for k, val := range payload {
 		switch t := val.(type) {
-		case int, int64:
-			normalizePayload[k] = strconv.Itoa(t.(int))
-		case uint, uint64:
-			normalizePayload[k] = strconv.FormatUint(t.(uint64), 64)
+		case uint, uint32, uint64, int, int32, int64:
+			normalizePayload[k] = fmt.Sprintf("%d", t)
 		case bool:
 			normalizePayload[k] = strconv.FormatBool(t)
 		case string:
