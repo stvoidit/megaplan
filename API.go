@@ -46,6 +46,11 @@ type API struct {
 	client    *http.Client
 }
 
+// SetCostumeClient - установить свой http.Client для API
+func (api *API) SetCostumeClient(c *http.Client) {
+	api.client = c
+}
+
 // ReadConfig - Сразу инициализирует API с указанием пути к файлу-конфигу
 func (api *API) ReadConfig(file io.ReadSeeker) {
 	var cnf = new(Config)

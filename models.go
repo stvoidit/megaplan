@@ -36,11 +36,11 @@ type TaskCard struct {
 	Status   string `json:"Status"`
 	Deadline string `json:"Deadline"`
 	Owner    struct {
-		ID   string `json:"Id"`
+		ID   uint   `json:"Id,string"`
 		Name string `json:"Name"`
 	} `json:"Owner"`
 	Responsible struct {
-		ID   string `json:"Id"`
+		ID   uint   `json:"Id,string"`
 		Name string `json:"Name"`
 	} `json:"Responsible"`
 	TimeCreated string `json:"TimeCreated"`
@@ -49,13 +49,17 @@ type TaskCard struct {
 	Tags        []Tag  `json:"Tags"`
 	Statement   string `json:"Statement"`
 	Auditors    []struct {
-		ID   string `json:"Id"`
+		ID   uint   `json:"Id,string"`
 		Name string `json:"Name"`
 	} `json:"Auditors"`
-	PlannedWork            string `json:"PlannedWork"`
+	Executors []struct {
+		ID   uint   `json:"Id,string"`
+		Name string `json:"Name"`
+	} `json:"Executors"`
+	PlannedWork            uint   `json:"PlannedWork,string"`
 	PlannedFinish          string `json:"PlannedFinish"`
-	ActualWork             string `json:"ActualWork"`
-	ActualWorkWithSubTasks string `json:"ActualWorkWithSubTasks"`
+	ActualWork             uint   `json:"ActualWork,string"`
+	ActualWorkWithSubTasks uint   `json:"ActualWorkWithSubTasks,string"`
 	IsOverdue              bool   `json:"IsOverdue"`
 }
 
