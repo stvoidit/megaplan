@@ -20,15 +20,15 @@ const rfc2822 = "Mon, 02 Jan 2006 15:04:05 -0700"
 // GET - get запрос к API
 func (api *API) GET(uri string, payload map[string]interface{}) *ResponseBuffer {
 	const rMethod = "GET"
-	urlQuery, queryHeader := api.queryHasher(rMethod, uri, payload)
-	return api.requestQuery(rMethod, urlQuery, queryHeader)
+	urlQuery, urlParams, queryHeader := api.queryHasher(rMethod, uri, payload)
+	return api.requestQuery(rMethod, urlQuery, urlParams, queryHeader)
 }
 
 // POST - post запрос на API
 func (api *API) POST(uri string, payload map[string]interface{}) *ResponseBuffer {
 	const rMethod = "POST"
-	urlQuery, queryHeader := api.queryHasher(rMethod, uri, payload)
-	return api.requestQuery(rMethod, urlQuery, queryHeader)
+	urlQuery, urlParams, queryHeader := api.queryHasher(rMethod, uri, payload)
+	return api.requestQuery(rMethod, urlQuery, urlParams, queryHeader)
 }
 
 // CheckUser - проверка пользователя для встроенного приложения
@@ -53,16 +53,16 @@ func (api *API) CheckUser(userSign string) (UserAppVerification, error) {
 }
 
 // queryHasher - задаем сигнатуру, отдает URL и Header для запросов к API
-func (api *API) queryHasher(method string, uri string, payload map[string]interface{}) (url.URL, http.Header) {
-	var normalizePayload = make(map[string]string)
+func (api *API) queryHasher(method string, uri string, payload map[string]interface{}) (url.URL, url.Values, http.Header) {
+	var urlParams = make(url.Values)
 	for k, val := range payload {
 		switch t := val.(type) {
 		case uint, uint32, uint64, int, int32, int64:
-			normalizePayload[k] = fmt.Sprintf("%d", t)
+			urlParams.Add(k, fmt.Sprintf("%d", t))
 		case bool:
-			normalizePayload[k] = strconv.FormatBool(t)
+			urlParams.Add(k, strconv.FormatBool(t))
 		case string:
-			normalizePayload[k] = t
+			urlParams.Add(k, t)
 		case nil:
 			continue
 		default:
@@ -75,11 +75,7 @@ func (api *API) queryHasher(method string, uri string, payload map[string]interf
 	}
 	URL.Path += uri
 	today := time.Now().Format(rfc2822)
-	urlParams := url.Values{}
-	for k, v := range normalizePayload {
-		urlParams.Add(k, v)
-	}
-	if len(urlParams) > 0 {
+	if len(urlParams) > 0 && method == "GET" {
 		URL.RawQuery = urlParams.Encode()
 	}
 	sigURL := strings.Replace(URL.String(), fmt.Sprintf("%s://", URL.Scheme), "", 1)
@@ -95,14 +91,22 @@ func (api *API) queryHasher(method string, uri string, payload map[string]interf
 		"Content-Type":    []string{"application/x-www-form-urlencoded"},
 		"accept-encoding": []string{"gzip, deflate, br"},
 	}
-	return *URL, queryHeader
+	return *URL, urlParams, queryHeader
 }
 
 // requestQuery - итоговый запрос к API предварительно сформированный Request с правильным набором headers
-func (api *API) requestQuery(method string, url url.URL, headers http.Header) *ResponseBuffer {
-	req, err := http.NewRequest(method, url.String(), nil)
-	if err != nil {
-		panic(err.Error())
+func (api *API) requestQuery(method string, url url.URL, urlParams url.Values, headers http.Header) *ResponseBuffer {
+	var req *http.Request
+	var err error
+	if method == "POST" {
+		if req, err = http.NewRequest(method, url.String(), strings.NewReader(urlParams.Encode())); err != nil {
+			panic(err.Error())
+		}
+	} else {
+		req.URL.RawQuery = urlParams.Encode()
+		if req, err = http.NewRequest(method, url.String(), nil); err != nil {
+			panic(err.Error())
+		}
 	}
 	req.Header = headers
 	resp, err := api.client.Do(req)
@@ -111,7 +115,7 @@ func (api *API) requestQuery(method string, url url.URL, headers http.Header) *R
 	}
 	var buff = new(ResponseBuffer)
 	if _, err := buff.ReadFrom(resp.Body); err != nil {
-		panic(err)
+		panic(err.Error())
 	}
 	resp.Body.Close()
 	return buff
