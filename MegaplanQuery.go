@@ -53,7 +53,7 @@ func (api *API) CheckUser(userSign string) (UserAppVerification, error) {
 }
 
 // queryHasher - задаем сигнатуру, отдает URL и Header для запросов к API
-func (api *API) queryHasher(method string, uri string, payload map[string]interface{}) (url.URL, url.Values, http.Header) {
+func (api *API) queryHasher(method string, uri string, payload map[string]interface{}) (*url.URL, url.Values, http.Header) {
 	var urlParams = make(url.Values)
 	for k, val := range payload {
 		switch t := val.(type) {
@@ -91,22 +91,22 @@ func (api *API) queryHasher(method string, uri string, payload map[string]interf
 		"Content-Type":    []string{"application/x-www-form-urlencoded"},
 		"accept-encoding": []string{"gzip, deflate, br"},
 	}
-	return *URL, urlParams, queryHeader
+	return URL, urlParams, queryHeader
 }
 
 // requestQuery - итоговый запрос к API предварительно сформированный Request с правильным набором headers
-func (api *API) requestQuery(method string, url url.URL, urlParams url.Values, headers http.Header) *ResponseBuffer {
+func (api *API) requestQuery(method string, URL *url.URL, urlParams url.Values, headers http.Header) *ResponseBuffer {
 	var req *http.Request
 	var err error
 	if method == "POST" {
-		if req, err = http.NewRequest(method, url.String(), strings.NewReader(urlParams.Encode())); err != nil {
+		if req, err = http.NewRequest(method, URL.String(), strings.NewReader(urlParams.Encode())); err != nil {
 			panic(err.Error())
 		}
 	} else {
-		req.URL.RawQuery = urlParams.Encode()
-		if req, err = http.NewRequest(method, url.String(), nil); err != nil {
+		if req, err = http.NewRequest(method, URL.String(), nil); err != nil {
 			panic(err.Error())
 		}
+		req.URL.RawQuery = urlParams.Encode()
 	}
 	req.Header = headers
 	resp, err := api.client.Do(req)
