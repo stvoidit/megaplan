@@ -69,7 +69,7 @@ func (api *API) queryHasher(method string, uri string, payload map[string]interf
 			fmt.Println("unrecognized type", t)
 		}
 	}
-	URL, err := url.Parse(api.config.Megaplan.Domain)
+	URL, err := url.Parse(api.domain)
 	if err != nil {
 		panic(err.Error())
 	}

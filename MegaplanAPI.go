@@ -81,3 +81,20 @@ func getToken(domain string, login string, md5password string, otc string) (stri
 	}
 	return AccessToken.Data.AccessID, AccessToken.Data.SecretKey, nil
 }
+
+// GetToken - Получение токена API
+func (api *API) GetToken(domain, login, password string) error {
+	md5p := md5Passord(password)
+	OTCkey, err := getOTC(domain, login, md5p)
+	if err != nil {
+		return err
+	}
+	AID, Skey, err := getToken(domain, login, md5p, OTCkey)
+	if err != nil {
+		return err
+	}
+	api.accessID = AID
+	api.secretKey = []byte(Skey)
+	api.domain = domain
+	return nil
+}

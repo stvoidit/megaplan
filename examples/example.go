@@ -2,20 +2,36 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/stvoidit/megaplan"
+	"gopkg.in/yaml.v3"
 )
 
-var api megaplan.API
+var api *megaplan.API
+
+// имплементация своего кофига, если имеется иерархия в файле
+type costumeConfig struct {
+	*megaplan.Config `yaml:"megaplan"`
+}
+
+// свой метод для парсинга с учетом иерархии в структуре файла
+func (cc *costumeConfig) ReadConfig(r io.Reader) {
+	yaml.NewDecoder(r).Decode(cc)
+}
 
 // Инициаолизация экземпляра API
 func init() {
-	file, err := os.Open("config.yaml")
+	r, err := os.Open("config.yaml")
 	if err != nil {
 		panic(err)
 	}
-	api.ReadConfig(file)
+	// api.ReadConfig(file)
+	var cnf costumeConfig
+	cnf.ReadConfig(r)
+	fmt.Printf("your costume config:\n%#v\n", cnf.Config)
+	api = megaplan.NewWithConfigFile(cnf.Config)
 }
 
 // Получение токена - accessID и secretKey
@@ -76,7 +92,7 @@ func getOnModel2() {
 }
 
 func main() {
-	getToken()
+	// getToken()
 	getRaw()      // return *bytes.Buffer
 	getOnModel1() // Decode in your custome structure
 	getOnModel2() // Decode in structure
