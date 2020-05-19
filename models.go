@@ -20,10 +20,11 @@ type EmployeeCard struct {
 		ID   uint   `json:"Id"`
 		Name string `json:"Name"`
 	} `json:"Position"`
-	Login     string `json:"Login"`
-	Email     string `json:"Email"`
-	FireDay   string `json:"FireDay"`
-	Behaviour string `json:"Behaviour"`
+	Login      string `json:"Login"`
+	Email      string `json:"Email"`
+	FireDay    string `json:"FireDay"`
+	Behaviour  string `json:"Behaviour"`
+	LastOnline string `json:"LastOnline"`
 }
 
 // EmployeeList - Список сотрудников
