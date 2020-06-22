@@ -1,100 +1,80 @@
-package megaplan
+package megaplang
 
 import (
-	"crypto/md5"
-	"encoding/hex"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"net/url"
-	"strings"
+	"os"
+
+	"golang.org/x/oauth2"
 )
 
-// md5Passord - хэшируем пароль в md5
-func md5Passord(p string) string {
-	hashPassword := md5.New()
-	hashPassword.Write([]byte(p))
-	md5String := hex.EncodeToString(hashPassword.Sum(nil))
-	return md5String
+// NewClien - инициализация новго экземпляра MegaplanAPI
+func NewClien(domain string) *MegaplanAPI {
+	var cnf = oauth2.Config{
+		Endpoint: oauth2.Endpoint{
+			TokenURL: fmt.Sprintf("https://%s/api/v3/auth/access_token", domain),
+		},
+	}
+	return &MegaplanAPI{cnf: &cnf}
 }
 
-// getOTC - получение временного ключа
-func getOTC(domain string, login string, md5password string) (string, error) {
-	const uriOTC = "/BumsCommonApiV01/User/createOneTimeKeyAuth.api"
-	var payload = url.Values{}
-	payload.Add("Login", login)
-	payload.Add("Password", md5password)
-	req, _ := http.NewRequest("POST", domain+uriOTC, strings.NewReader(payload.Encode()))
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	var client = &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	var OTCdata = new(struct {
-		response
-		Data struct {
-			OneTimeKey string `json:"OneTimeKey"`
-		} `json:"data"`
-	})
-	if err := json.NewDecoder(resp.Body).Decode(OTCdata); err != nil {
-		return "", err
-	}
-	if err := OTCdata.response.IFerror(); err != nil {
-		return "", err
-	}
-	return OTCdata.Data.OneTimeKey, nil
+func (mp *MegaplanAPI) setClient() {
+	mp.Client = oauth2.NewClient(context.Background(), mp.ts)
 }
 
-// getToken - AccessId, SecretKey
-func getToken(domain string, login string, md5password string, otc string) (string, string, error) {
-	const uriToken = "/BumsCommonApiV01/User/authorize.api"
-	var payload = url.Values{}
-	payload.Add("Login", login)
-	payload.Add("Password", md5password)
-	payload.Add("OneTimeKey", otc)
-	req, _ := http.NewRequest("POST", domain+uriToken, strings.NewReader(payload.Encode()))
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", "", err
-	}
-	defer resp.Body.Close()
-	AccessToken := new(struct {
-		response
-		Data struct {
-			UserID       int    `json:"UserId"`
-			EmployeeID   int    `json:"EmployeeId"`
-			ContractorID string `json:"ContractorId"`
-			AccessID     string `json:"AccessId"`
-			SecretKey    string `json:"SecretKey"`
-		} `json:"data"`
-	})
-	if err := json.NewDecoder(resp.Body).Decode(AccessToken); err != nil {
-		return "", "", err
-	}
-	if err := AccessToken.response.IFerror(); err != nil {
-		return "", "", err
-	}
-	return AccessToken.Data.AccessID, AccessToken.Data.SecretKey, nil
+// MegaplanAPI - клиент для работы с мегаплан v3, обертка над oauth2
+type MegaplanAPI struct {
+	cnf *oauth2.Config
+	ts  oauth2.TokenSource
+	*http.Client
 }
 
-// GetToken - Получение токена API
-func (api *API) GetToken(domain, login, password string) error {
-	md5p := md5Passord(password)
-	OTCkey, err := getOTC(domain, login, md5p)
+// CheckCredential - проверить сохраненный файл токена
+func (mp *MegaplanAPI) CheckCredential(tokenfile string) error {
+	r, err := os.Open(tokenfile)
 	if err != nil {
 		return err
 	}
-	AID, Skey, err := getToken(domain, login, md5p, OTCkey)
-	if err != nil {
+	defer r.Close()
+	t := new(oauth2.Token)
+	if err = json.NewDecoder(r).Decode(t); err != nil {
 		return err
 	}
-	api.accessID = AID
-	api.secretKey = []byte(Skey)
-	api.domain = domain
+	mp.ts = mp.cnf.TokenSource(context.Background(), t)
+	if !t.Valid() {
+		fmt.Println("refresh token")
+		t, err := mp.ts.Token()
+		if err != nil {
+			return err
+		}
+		if err := saveToken(t, tokenfile); err != nil {
+			return err
+		}
+	}
+	mp.setClient()
 	return nil
+}
+
+// GetNewToken - получить новый ключ, сохранить и применить в текущем экземпляре API
+func (mp *MegaplanAPI) GetNewToken(username, password, tokenfile string) error {
+	t, err := mp.cnf.PasswordCredentialsToken(context.Background(), username, password)
+	if err != nil {
+		return err
+	}
+	saveToken(t, tokenfile)
+	mp.ts = mp.cnf.TokenSource(context.Background(), t)
+	mp.setClient()
+	fmt.Println("create new token file")
+	return nil
+}
+
+func saveToken(t *oauth2.Token, filename string) error {
+	w, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	return json.NewEncoder(w).Encode(t)
 }

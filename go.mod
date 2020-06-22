@@ -1,5 +1,5 @@
-module github.com/stvoidit/megaplan
+module megaplang/v3
 
 go 1.14
 
-require gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+require golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
