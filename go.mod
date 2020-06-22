@@ -1,4 +1,4 @@
-module megaplang/v3
+module github.com/stvoidit/megaplan/v3
 
 go 1.14
 

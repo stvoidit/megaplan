@@ -2,8 +2,9 @@ package main
 
 import (
 	"io"
-	"megaplang/v3"
 	"os"
+
+	megaplang "github.com/stvoidit/megaplan/v3"
 )
 
 func main() {
