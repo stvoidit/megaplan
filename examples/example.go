@@ -5,8 +5,8 @@ import (
 	"io"
 	"os"
 
-	"github.com/stvoidit/megaplan"
-	"gopkg.in/yaml.v3"
+	"github.com/stvoidit/megaplan/v1"
+	"gopkg.in/yaml.v2"
 )
 
 var api *megaplan.API

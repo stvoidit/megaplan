@@ -1,5 +1,5 @@
-module github.com/stvoidit/megaplan
+module github.com/stvoidit/megaplan/v1
 
 go 1.14
 
-require gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+require gopkg.in/yaml.v2 v2.3.0

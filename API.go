@@ -4,7 +4,7 @@ import (
 	"io"
 	"net/http"
 
-	"gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v2"
 )
 
 // NewWithConfigFile - инициализация экземпляра из файла конфигурации
