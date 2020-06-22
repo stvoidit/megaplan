@@ -1,4 +1,4 @@
-package megaplang
+package megaplan
 
 import (
 	"context"
@@ -11,28 +11,28 @@ import (
 )
 
 // NewClien - инициализация новго экземпляра MegaplanAPI
-func NewClien(domain string) *MegaplanAPI {
+func NewClien(domain string) *APImegaplan {
 	var cnf = oauth2.Config{
 		Endpoint: oauth2.Endpoint{
 			TokenURL: fmt.Sprintf("https://%s/api/v3/auth/access_token", domain),
 		},
 	}
-	return &MegaplanAPI{cnf: &cnf}
+	return &APImegaplan{cnf: &cnf}
 }
 
-func (mp *MegaplanAPI) setClient() {
+func (mp *APImegaplan) setClient() {
 	mp.Client = oauth2.NewClient(context.Background(), mp.ts)
 }
 
-// MegaplanAPI - клиент для работы с мегаплан v3, обертка над oauth2
-type MegaplanAPI struct {
+// APImegaplan - клиент для работы с мегаплан v3, обертка над oauth2
+type APImegaplan struct {
 	cnf *oauth2.Config
 	ts  oauth2.TokenSource
 	*http.Client
 }
 
 // CheckCredential - проверить сохраненный файл токена
-func (mp *MegaplanAPI) CheckCredential(tokenfile string) error {
+func (mp *APImegaplan) CheckCredential(tokenfile string) error {
 	r, err := os.Open(tokenfile)
 	if err != nil {
 		return err
@@ -58,7 +58,7 @@ func (mp *MegaplanAPI) CheckCredential(tokenfile string) error {
 }
 
 // GetNewToken - получить новый ключ, сохранить и применить в текущем экземпляре API
-func (mp *MegaplanAPI) GetNewToken(username, password, tokenfile string) error {
+func (mp *APImegaplan) GetNewToken(username, password, tokenfile string) error {
 	t, err := mp.cnf.PasswordCredentialsToken(context.Background(), username, password)
 	if err != nil {
 		return err
