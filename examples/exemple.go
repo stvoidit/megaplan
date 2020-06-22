@@ -4,11 +4,11 @@ import (
 	"io"
 	"os"
 
-	megaplang "github.com/stvoidit/megaplan/v3"
+	"github.com/stvoidit/megaplan/v3"
 )
 
 func main() {
-	api := megaplang.NewClien(`mymegaplan.ru`)
+	api := megaplan.NewClien(`mymegaplan.ru`)
 	if err := api.CheckCredential("megaplan-token.json"); err != nil {
 		if err := api.GetNewToken(`username@email.ru`, `password`, `megaplan-token.json`); err != nil {
 			panic(err)
