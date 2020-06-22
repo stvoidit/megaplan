@@ -12,3 +12,4 @@ test*
 *.out
 config.yaml
 *.pdf
+*.json
