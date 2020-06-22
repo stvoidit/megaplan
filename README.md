@@ -8,7 +8,7 @@
 
     import (
         "io"
-        "megaplang/v3"
+        "github.com/stvoidit/megaplan/v3"
         "os"
     )
 
