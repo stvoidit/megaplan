@@ -15,17 +15,20 @@ import (
 )
 
 // NewClien - инициализация новго экземпляра MegaplanAPI
-func NewClien(domain string) *APImegaplan {
+func NewClien(domain, username, password string, token *oauth2.Token) (api *APImegaplan, err error) {
 	var cnf = oauth2.Config{
 		Endpoint: oauth2.Endpoint{
 			TokenURL: fmt.Sprintf("https://%s/api/v3/auth/access_token", domain),
 		},
 	}
-	return &APImegaplan{cnf: &cnf, domain: domain}
-}
-
-func (mp *APImegaplan) setClient() {
-	mp.Client = oauth2.NewClient(context.Background(), mp.ts)
+	api = &APImegaplan{cnf: &cnf, domain: domain}
+	if token != nil {
+		err = api.checkCredential(token)
+	} else {
+		err = api.getNewToken(username, password)
+	}
+	api.Client = oauth2.NewClient(oauth2.NoContext, api.ts)
+	return
 }
 
 // APImegaplan - клиент для работы с мегаплан v3, обертка над oauth2
@@ -36,52 +39,25 @@ type APImegaplan struct {
 	*http.Client
 }
 
+// Token - вернуть актуальный токен
+func (mp *APImegaplan) Token() (*oauth2.Token, error) {
+	return mp.ts.Token()
+}
+
 // CheckCredential - проверить сохраненный файл токена
-func (mp *APImegaplan) CheckCredential(tokenfile string) error {
-	r, err := os.Open(tokenfile)
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-	t := new(oauth2.Token)
-	if err = json.NewDecoder(r).Decode(t); err != nil {
-		return err
-	}
-	mp.ts = mp.cnf.TokenSource(context.Background(), t)
-	if !t.Valid() {
-		fmt.Println("refresh token")
-		t, err := mp.ts.Token()
-		if err != nil {
-			return err
-		}
-		if err := saveToken(t, tokenfile); err != nil {
-			return err
-		}
-	}
-	mp.setClient()
+func (mp *APImegaplan) checkCredential(token *oauth2.Token) error {
+	mp.ts = mp.cnf.TokenSource(oauth2.NoContext, token)
 	return nil
 }
 
 // GetNewToken - получить новый ключ, сохранить и применить в текущем экземпляре API
-func (mp *APImegaplan) GetNewToken(username, password, tokenfile string) error {
-	t, err := mp.cnf.PasswordCredentialsToken(context.Background(), username, password)
+func (mp *APImegaplan) getNewToken(username, password string) error {
+	t, err := mp.cnf.PasswordCredentialsToken(oauth2.NoContext, username, password)
 	if err != nil {
 		return err
 	}
-	saveToken(t, tokenfile)
 	mp.ts = mp.cnf.TokenSource(context.Background(), t)
-	mp.setClient()
-	fmt.Println("create new token file")
 	return nil
-}
-
-func saveToken(t *oauth2.Token, filename string) error {
-	w, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer w.Close()
-	return json.NewEncoder(w).Encode(t)
 }
 
 // UploadFiles - загрузка файла, в ответ приходит список из объектов,
@@ -148,4 +124,28 @@ func (mi *MetaInfo) Error() error {
 		msgs += errMsg
 	}
 	return errors.New(msgs)
+}
+
+// SaveToken - сохранить токен в файл
+func SaveToken(t *oauth2.Token, filename string) error {
+	w, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer w.Close()
+	return json.NewEncoder(w).Encode(t)
+}
+
+// LoadTokenFromFile - загрузить токен из файла
+func LoadTokenFromFile(filename string) (*oauth2.Token, error) {
+	r, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	t := new(oauth2.Token)
+	if err = json.NewDecoder(r).Decode(t); err != nil {
+		return nil, err
+	}
+	return t, nil
 }
