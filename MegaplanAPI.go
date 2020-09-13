@@ -4,10 +4,44 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 )
+
+// API - Структура объекта API v1
+type API struct {
+	accessID  string
+	secretKey []byte
+	domain    string
+	appUUID   string
+	appSecret []byte
+	client    *http.Client
+}
+
+// NewAPI - новый экземпляр api
+func NewAPI(accessID, secretKey, domain, appUUID, appSecret string) *API {
+	return &API{
+		client:    http.DefaultClient,
+		accessID:  accessID,
+		secretKey: []byte(secretKey),
+		domain:    domain,
+		appUUID:   appUUID,
+		appSecret: []byte(appSecret),
+	}
+}
+
+// SetCustomClient - установить свой http.Client для API
+func (api *API) SetCustomClient(c *http.Client) {
+	api.client = c
+}
+
+// SetEmbeddedApplication - установить ключ от встроенного приложения
+func (api *API) SetEmbeddedApplication(appuuid, appsecret string) {
+	api.appUUID = appuuid
+	api.secretKey = []byte(appsecret)
+}
 
 // md5Passord - хэшируем пароль в md5
 func md5Passord(p string) string {
@@ -41,8 +75,8 @@ func getOTC(domain string, login string, md5password string) (string, error) {
 	if err := json.NewDecoder(resp.Body).Decode(OTCdata); err != nil {
 		return "", err
 	}
-	if err := OTCdata.response.IFerror(); err != nil {
-		return "", err
+	if OTCdata.response.Status.Code == "error" {
+		return "", errors.New(OTCdata.response.Status.Message)
 	}
 	return OTCdata.Data.OneTimeKey, nil
 }
@@ -76,8 +110,8 @@ func getToken(domain string, login string, md5password string, otc string) (stri
 	if err := json.NewDecoder(resp.Body).Decode(AccessToken); err != nil {
 		return "", "", err
 	}
-	if err := AccessToken.response.IFerror(); err != nil {
-		return "", "", err
+	if AccessToken.response.Status.Code == "error" {
+		return "", "", errors.New(AccessToken.response.Status.Message)
 	}
 	return AccessToken.Data.AccessID, AccessToken.Data.SecretKey, nil
 }

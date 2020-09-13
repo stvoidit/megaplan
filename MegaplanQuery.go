@@ -5,7 +5,6 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -17,22 +16,33 @@ import (
 
 const rfc2822 = "Mon, 02 Jan 2006 15:04:05 -0700"
 
+type response struct {
+	Status struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"status"`
+}
+
 // GET - get запрос к API
-func (api *API) GET(uri string, payload map[string]interface{}) *ResponseBuffer {
-	const rMethod = "GET"
-	urlQuery, urlParams, queryHeader := api.queryHasher(rMethod, uri, payload)
-	return api.requestQuery(rMethod, urlQuery, urlParams, queryHeader)
+func (api *API) GET(uri string, payload map[string]interface{}) (*http.Response, error) {
+	urlQuery, urlParams, queryHeader, err := api.queryHasher(http.MethodGet, uri, payload)
+	if err != nil {
+		return nil, err
+	}
+	return api.requestQuery(http.MethodGet, urlQuery, urlParams, queryHeader)
 }
 
 // POST - post запрос на API
-func (api *API) POST(uri string, payload map[string]interface{}) *ResponseBuffer {
-	const rMethod = "POST"
-	urlQuery, urlParams, queryHeader := api.queryHasher(rMethod, uri, payload)
-	return api.requestQuery(rMethod, urlQuery, urlParams, queryHeader)
+func (api *API) POST(uri string, payload map[string]interface{}) (*http.Response, error) {
+	urlQuery, urlParams, queryHeader, err := api.queryHasher(http.MethodPost, uri, payload)
+	if err != nil {
+		return nil, err
+	}
+	return api.requestQuery(http.MethodPost, urlQuery, urlParams, queryHeader)
 }
 
 // CheckUser - проверка пользователя для встроенного приложения
-func (api *API) CheckUser(userSign string) (UserAppVerification, error) {
+func (api *API) CheckUser(userSign string) (*http.Response, error) {
 	var appAPI API
 	appAPI = *api
 	appAPI.accessID = api.appUUID
@@ -41,49 +51,44 @@ func (api *API) CheckUser(userSign string) (UserAppVerification, error) {
 		"uuid":     api.appUUID,
 		"userSign": userSign,
 	}
-	b := appAPI.POST("/BumsSettingsApiV01/Application/checkUserSign.json", payload)
-	var i UserVerifyResponse
-	if err := json.NewDecoder(b).Decode(&i); err != nil {
-		return i.Data, err
-	}
-	if i.response.Status.Code != "ok" {
-		return i.Data, errors.New("invalide user data")
-	}
-	return i.Data, nil
+	return appAPI.POST("/BumsSettingsApiV01/Application/checkUserSign.json", payload)
 }
 
 // queryHasher - задаем сигнатуру, отдает URL и Header для запросов к API
-func (api *API) queryHasher(method string, uri string, payload map[string]interface{}) (*url.URL, url.Values, http.Header) {
+func (api *API) queryHasher(method string, uri string, payload map[string]interface{}) (*url.URL, url.Values, http.Header, error) {
 	var urlParams = make(url.Values)
-	for k, val := range payload {
-		switch t := val.(type) {
-		case uint, uint32, uint64, int, int32, int64:
-			urlParams.Add(k, fmt.Sprintf("%d", t))
-		case bool:
-			urlParams.Add(k, strconv.FormatBool(t))
-		case string:
-			urlParams.Add(k, t)
-		case nil:
-			continue
-		default:
-			fmt.Println("unrecognized type", t)
-		}
-	}
 	URL, err := url.Parse(api.domain)
 	if err != nil {
-		panic(err.Error())
+		return nil, urlParams, http.Header{}, err
 	}
 	URL.Path += uri
-	today := time.Now().Format(rfc2822)
-	if len(urlParams) > 0 && method == "GET" {
-		URL.RawQuery = urlParams.Encode()
+	if method == http.MethodGet {
+		for k, val := range payload {
+			switch t := val.(type) {
+			case uint, uint8, uint16, uint32, uint64, int, int8, int16, int32, int64:
+				urlParams.Add(k, fmt.Sprintf("%d", t))
+			case bool:
+				urlParams.Add(k, strconv.FormatBool(t))
+			case string:
+				urlParams.Add(k, t)
+			case nil:
+				continue
+			default:
+				return nil, urlParams, http.Header{}, fmt.Errorf("unrecognized type: %v", t)
+			}
+		}
+		if len(urlParams) > 0 {
+			URL.RawQuery = urlParams.Encode()
+		}
 	}
+	today := time.Now().Format(rfc2822)
 	sigURL := strings.Replace(URL.String(), fmt.Sprintf("%s://", URL.Scheme), "", 1)
 	Signature := fmt.Sprintf("%s\n\napplication/x-www-form-urlencoded\n%s\n%s", method, today, sigURL)
 	h := hmac.New(sha1.New, api.secretKey)
-	h.Write([]byte(Signature))
-	hexSha1 := hex.EncodeToString(h.Sum(nil))
-	sha1Query := base64.StdEncoding.EncodeToString([]byte(hexSha1))
+	if _, err := h.Write([]byte(Signature)); err != nil {
+		return nil, urlParams, http.Header{}, err
+	}
+	sha1Query := base64.StdEncoding.EncodeToString([]byte(hex.EncodeToString(h.Sum(nil))))
 	queryHeader := http.Header{
 		"Date":            []string{today},
 		"X-Authorization": []string{api.accessID + ":" + sha1Query},
@@ -91,32 +96,25 @@ func (api *API) queryHasher(method string, uri string, payload map[string]interf
 		"Content-Type":    []string{"application/x-www-form-urlencoded"},
 		"accept-encoding": []string{"gzip, deflate, br"},
 	}
-	return URL, urlParams, queryHeader
+	return URL, urlParams, queryHeader, nil
 }
 
 // requestQuery - итоговый запрос к API предварительно сформированный Request с правильным набором headers
-func (api *API) requestQuery(method string, URL *url.URL, urlParams url.Values, headers http.Header) *ResponseBuffer {
+func (api *API) requestQuery(method string, URL *url.URL, urlParams url.Values, headers http.Header) (response *http.Response, err error) {
 	var req *http.Request
-	var err error
-	if method == "POST" {
+	switch method {
+	case http.MethodPost:
 		if req, err = http.NewRequest(method, URL.String(), strings.NewReader(urlParams.Encode())); err != nil {
-			panic(err.Error())
+			return nil, err
 		}
-	} else {
+	case http.MethodGet:
 		if req, err = http.NewRequest(method, URL.String(), nil); err != nil {
-			panic(err.Error())
+			return nil, err
 		}
 		req.URL.RawQuery = urlParams.Encode()
+	default:
+		return nil, errors.New("unavailable http method")
 	}
 	req.Header = headers
-	resp, err := api.client.Do(req)
-	if err != nil {
-		panic(err.Error())
-	}
-	var buff = new(ResponseBuffer)
-	if _, err := buff.ReadFrom(resp.Body); err != nil {
-		panic(err.Error())
-	}
-	resp.Body.Close()
-	return buff
+	return api.client.Do(req)
 }
