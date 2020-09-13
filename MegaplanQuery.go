@@ -25,20 +25,20 @@ type response struct {
 
 // GET - get запрос к API
 func (api *API) GET(uri string, payload map[string]interface{}) (*http.Response, error) {
-	urlQuery, urlParams, queryHeader, err := api.queryHasher(http.MethodGet, uri, payload)
+	request, err := api.queryHasher(http.MethodGet, uri, payload)
 	if err != nil {
 		return nil, err
 	}
-	return api.requestQuery(http.MethodGet, urlQuery, urlParams, queryHeader)
+	return api.Do(request)
 }
 
 // POST - post запрос на API
 func (api *API) POST(uri string, payload map[string]interface{}) (*http.Response, error) {
-	urlQuery, urlParams, queryHeader, err := api.queryHasher(http.MethodPost, uri, payload)
+	request, err := api.queryHasher(http.MethodPost, uri, payload)
 	if err != nil {
 		return nil, err
 	}
-	return api.requestQuery(http.MethodPost, urlQuery, urlParams, queryHeader)
+	return api.Do(request)
 }
 
 // CheckUser - проверка пользователя для встроенного приложения
@@ -54,12 +54,12 @@ func (api *API) CheckUser(userSign string) (*http.Response, error) {
 	return appAPI.POST("/BumsSettingsApiV01/Application/checkUserSign.json", payload)
 }
 
-// queryHasher - задаем сигнатуру, отдает URL и Header для запросов к API
-func (api *API) queryHasher(method string, uri string, payload map[string]interface{}) (*url.URL, url.Values, http.Header, error) {
+// queryHasher - задаем сигнатуру, отдает URL и Header для запросов к API, создаем http.Request
+func (api *API) queryHasher(method string, uri string, payload map[string]interface{}) (request *http.Request, err error) {
 	var urlParams = make(url.Values)
 	URL, err := url.Parse(api.domain)
 	if err != nil {
-		return nil, urlParams, http.Header{}, err
+		return nil, err
 	}
 	URL.Path += uri
 	if method == http.MethodGet {
@@ -74,47 +74,45 @@ func (api *API) queryHasher(method string, uri string, payload map[string]interf
 			case nil:
 				continue
 			default:
-				return nil, urlParams, http.Header{}, fmt.Errorf("unrecognized type: %v", t)
+				return nil, fmt.Errorf("unrecognized type: %v", t)
 			}
 		}
 		if len(urlParams) > 0 {
 			URL.RawQuery = urlParams.Encode()
 		}
 	}
+	switch method {
+	case http.MethodPost:
+		if request, err = http.NewRequest(method, URL.String(), strings.NewReader(urlParams.Encode())); err != nil {
+			return nil, err
+		}
+	case http.MethodGet:
+		if request, err = http.NewRequest(method, URL.String(), nil); err != nil {
+			return nil, err
+		}
+		request.URL.RawQuery = urlParams.Encode()
+	default:
+		return nil, errors.New("unavailable http method")
+	}
+	// специально кодируем запрос для v1 API для заголовка X-Authorization
 	today := time.Now().Format(rfc2822)
 	sigURL := strings.Replace(URL.String(), fmt.Sprintf("%s://", URL.Scheme), "", 1)
 	Signature := fmt.Sprintf("%s\n\napplication/x-www-form-urlencoded\n%s\n%s", method, today, sigURL)
 	h := hmac.New(sha1.New, api.secretKey)
 	if _, err := h.Write([]byte(Signature)); err != nil {
-		return nil, urlParams, http.Header{}, err
+		return nil, err
 	}
-	sha1Query := base64.StdEncoding.EncodeToString([]byte(hex.EncodeToString(h.Sum(nil))))
-	queryHeader := http.Header{
+	request.Header = http.Header{
 		"Date":            []string{today},
-		"X-Authorization": []string{api.accessID + ":" + sha1Query},
+		"X-Authorization": []string{api.accessID + ":" + base64.StdEncoding.EncodeToString([]byte(hex.EncodeToString(h.Sum(nil))))},
 		"Accept":          []string{"application/json"},
 		"Content-Type":    []string{"application/x-www-form-urlencoded"},
 		"accept-encoding": []string{"gzip, deflate, br"},
 	}
-	return URL, urlParams, queryHeader, nil
+	return
 }
 
-// requestQuery - итоговый запрос к API предварительно сформированный Request с правильным набором headers
-func (api *API) requestQuery(method string, URL *url.URL, urlParams url.Values, headers http.Header) (response *http.Response, err error) {
-	var req *http.Request
-	switch method {
-	case http.MethodPost:
-		if req, err = http.NewRequest(method, URL.String(), strings.NewReader(urlParams.Encode())); err != nil {
-			return nil, err
-		}
-	case http.MethodGet:
-		if req, err = http.NewRequest(method, URL.String(), nil); err != nil {
-			return nil, err
-		}
-		req.URL.RawQuery = urlParams.Encode()
-	default:
-		return nil, errors.New("unavailable http method")
-	}
-	req.Header = headers
-	return api.client.Do(req)
+// Do - обертка над стандартным Do(*httpRequest)
+func (api *API) Do(request *http.Request) (response *http.Response, err error) {
+	return api.client.Do(request)
 }
