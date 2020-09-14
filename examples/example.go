@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/stvoidit/megaplan"
+	"github.com/stvoidit/megaplan/v1"
 )
 
 const (
