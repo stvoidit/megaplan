@@ -1,3 +1,3 @@
-module github.com/stvoidit/megaplan/v1
+module github.com/stvoidit/megaplan
 
 go 1.14
