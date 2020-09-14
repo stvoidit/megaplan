@@ -11,7 +11,7 @@ https://dev.megaplan.ru/r1905/api/index.html
 Представляет простую обертку над http методами GET и POST
 Алгоритм шифрования запроса см. в методе __queryHashing__, может быть реализован на любом ЯП.
 
-    go get github.com/stvoidit/megaplan
+    go get github.com/stvoidit/megaplan/v1
 
 Пример использования:
 
