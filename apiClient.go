@@ -64,8 +64,12 @@ type ClientV3 struct {
 
 // Do - http.Do + установка обязательных заголовков
 func (c *ClientV3) Do(req *http.Request) (*http.Response, error) {
+	const ct = "Content-Type"
 	for h := range c.defaultHeaders {
 		req.Header.Set(h, c.defaultHeaders.Get(h))
+	}
+	if req.Header.Get(ct) == "" {
+		req.Header.Set(ct, "application/json")
 	}
 	return c.client.Do(req)
 }

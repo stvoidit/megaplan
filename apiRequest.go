@@ -1,6 +1,12 @@
 package megaplan
 
-import "time"
+import (
+	"bytes"
+	"io"
+	"mime/multipart"
+	"net/http"
+	"time"
+)
 
 // ISO8601 - формат даты для api
 const ISO8601 = `2006-01-02T15:04:05-07:00`
@@ -79,4 +85,32 @@ func SetEntityArray(field string, ents ...QueryBuildingFunc) QueryBuildingFunc {
 // SetRawField - добавить поле с простым типом значения (string, int, etc.)
 func SetRawField(field string, value interface{}) QueryBuildingFunc {
 	return func(qp QueryParams) { qp[field] = value }
+}
+
+// UploadFile - загрузка файла, возвращает обычный http.Response, в ответе стандартная структура ответа + данные для базовой сущности
+func (c *ClientV3) UploadFile(filename string, fileRader io.Reader) (io.ReadCloser, error) {
+	var buf = bytes.NewBuffer(nil) // default 1024 bytes buffer
+	defer buf.Reset()
+	var mw = multipart.NewWriter(buf)
+	fw, err := mw.CreateFormFile("files[]", filename)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.Copy(fw, fileRader); err != nil {
+		return nil, err
+	}
+	if err := mw.Close(); err != nil {
+		return nil, err
+	}
+	request, err := http.NewRequest(http.MethodPost, c.domain, buf)
+	if err != nil {
+		return nil, err
+	}
+	request.URL.Path = "/api/file"
+	request.Header.Set("Content-Type", mw.FormDataContentType())
+	response, err := c.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	return unzipResponse(response)
 }
