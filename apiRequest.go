@@ -5,67 +5,59 @@ import "time"
 // ISO8601 - формат даты для api
 const ISO8601 = `2006-01-02T15:04:05-07:00`
 
+// BuildQueryParams - сборка объекта для запроса
+func BuildQueryParams(opts ...QueryBuildingFunc) (qp QueryParams) {
+	qp = make(QueryParams)
+	for _, opt := range opts {
+		opt(qp)
+	}
+	return qp
+}
+
 // QueryBuildingFunc - функция посттроения тела запроса (обычно json для post запроса)
 type QueryBuildingFunc func(QueryParams)
 
-// SetEntityField - добавить поле с сущностью
-func SetEntityField(fieldName string, contentType string, value interface{}) (qbf QueryBuildingFunc) {
-	var stubQBF = func(qp QueryParams) {} // зашлушка возврата, иначе возвращается nil, который может вызвать ошибки
+// CreateEnity - создать базовую сущность в формате "Мегаплана"
+// ! могут быть не описаны крайние или редкоиспользуемые типы
+func CreateEnity(contentType string, value interface{}) (qp QueryParams) {
+	qp = make(QueryParams, 2)
+	qp["contentType"] = contentType
+
 	switch contentType {
 	case "DateOnly":
 		t, isTime := value.(time.Time)
 		if !isTime {
-			return stubQBF
+			return nil
 		}
-		qbf = func(qp QueryParams) {
-			qp[fieldName] = QueryParams{
-				"contentType": contentType,
-				"year":        t.Year(),
-				"month":       t.Month() - 1,
-				"day":         t.Day(),
-			}
-		}
+		qp["year"] = t.Year()
+		qp["month"] = t.Month() - 1
+		qp["day"] = t.Day()
 	case "DateTime":
 		t, isTime := value.(time.Time)
 		if !isTime {
-			return func(qp QueryParams) {}
+			return nil
 		}
-		qbf = func(qp QueryParams) {
-			qp[fieldName] = QueryParams{
-				"contentType": contentType,
-				"value":       t.Format(ISO8601),
-			}
-		}
+		qp["value"] = t.Format(ISO8601)
 	case "DateInterval":
 		// если передается не время, то должно указываться кол-во секунд (актуальная документация мегаплана пишет что миллисекунды - это ошибка)
 		switch v := value.(type) {
-		case uint, uint32, uint64, int, int32, int64:
-			qbf = func(qp QueryParams) {
-				qp[fieldName] = QueryParams{
-					"contentType": contentType,
-					"value":       v,
-				}
-			}
 		case time.Time:
-			qbf = func(qp QueryParams) {
-				qp[fieldName] = QueryParams{
-					"contentType": contentType,
-					"value":       v.Second(),
-				}
-			}
+			qp["value"] = v.Second()
+		case time.Duration:
+			qp["value"] = int(v.Seconds())
 		default:
-			qbf = stubQBF
+			qp["value"] = v
 		}
 	default:
 		// по умолчанию BaseEntity - это объект с указанием типа и ID
-		qbf = func(qp QueryParams) {
-			qp[fieldName] = QueryParams{
-				"contentType": contentType,
-				"id":          value,
-			}
-		}
+		qp["id"] = value
 	}
 	return
+}
+
+// SetEntityField - добавить поле с сущностью
+func SetEntityField(fieldName string, contentType string, value interface{}) (qbf QueryBuildingFunc) {
+	return func(qp QueryParams) { qp[fieldName] = CreateEnity(contentType, value) }
 }
 
 // SetEntityArray - добавление массива сущностей в поле (например список аудиторов)

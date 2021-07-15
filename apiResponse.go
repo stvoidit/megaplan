@@ -3,8 +3,10 @@ package megaplan
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"strings"
 )
 
 // Response - ответ API
@@ -37,11 +39,12 @@ type Pagination struct {
 	HasMorePrev bool  `json:"hasMorePrev"`
 }
 
-// UnmarshalJSON - ...
+// UnmarshalJSON - json.Unmarshaler
 func (p *Pagination) UnmarshalJSON(b []byte) (err error) {
 	if bytes.Equal(b, []byte{91, 93}) {
 		return nil
 	}
+
 	dec := json.NewDecoder(bytes.NewReader(b))
 	for {
 		t, err := dec.Token()
@@ -75,7 +78,8 @@ func (p *Pagination) UnmarshalJSON(b []byte) (err error) {
 	return nil
 }
 
-// MarshalJSON - ...
+// MarshalJSON - json.Marshaler
+// TODO: вообще обратный маршалинг на практике не нужен, поэтому нужно доделать позже
 func (p Pagination) MarshalJSON() ([]byte, error) { return nil, nil }
 
 // Meta - metainfo
@@ -91,7 +95,11 @@ type Meta struct {
 // Error - если была ошибка, переданная в meta, то вернется ошибка с описание мегаплана, если нет, то вернется nil
 func (m Meta) Error() (err error) {
 	if len(m.Errors) > 0 {
-		err = fmt.Errorf("%v %v", m.Errors[0].Fields, m.Errors[0].Message)
+		var errorsStr = make([]string, len(m.Errors))
+		for i := range m.Errors {
+			errorsStr[i] = fmt.Sprintf("FIELD: %v MESSAGE: %v", m.Errors[i].Fields, m.Errors[i].Message)
+		}
+		err = errors.New(strings.Join(errorsStr, "\n"))
 	}
 	return
 }

@@ -18,7 +18,9 @@ import (
 func NewClient(domain, token string, opts ...ClientOption) (c *ClientV3) {
 	// обмен трафиком идёт очень активный, поэтому целесообразно использовать http2 + KeepAlive
 	// бэкэнд мегаплана корректно умеет работать с http и KeepAlive, что экономит время и ресурсы на соединение
+	var idleCount = runtime.NumCPU() // по умолчанию 2, поэтому желательно увеличить до оптимального кол-ва
 	var tr = &http.Transport{
+		Proxy: http.ProxyFromEnvironment,
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 			MaxVersion: tls.VersionTLS13,
@@ -30,7 +32,8 @@ func NewClient(domain, token string, opts ...ClientOption) (c *ClientV3) {
 			KeepAlive: time.Minute,
 		}).DialContext,
 		TLSHandshakeTimeout: 30 * time.Second,
-		MaxIdleConns:        0,
+		MaxIdleConns:        idleCount,
+		MaxIdleConnsPerHost: idleCount,
 		IdleConnTimeout:     time.Minute,
 		ForceAttemptHTTP2:   true,
 		ReadBufferSize:      256 << 10,
@@ -60,15 +63,17 @@ type ClientV3 struct {
 
 // Do - http.Do + установка обязательных заголовков
 func (c *ClientV3) Do(req *http.Request) (*http.Response, error) {
-	req.Header = c.defaultHeaders
+	for h := range c.defaultHeaders {
+		req.Header.Set(h, c.defaultHeaders.Get(h))
+	}
 	return c.client.Do(req)
 }
 
 // DoRequestAPI - т.к. в v3 параметры запроса для GET (json маршализируется и будет иметь вид: "*?{params}=")
-func (c ClientV3) DoRequestAPI(method string, endpoint string, params QueryParams, body io.Reader) (rc io.ReadCloser, err error) {
+func (c ClientV3) DoRequestAPI(method string, endpoint string, search QueryParams, body io.Reader) (rc io.ReadCloser, err error) {
 	var args string // параметры строки запроса
-	if params != nil {
-		args = params.QueryEscape()
+	if search != nil {
+		args = search.QueryEscape()
 	}
 	request, err := http.NewRequest(method, c.domain, body)
 	if err != nil {
