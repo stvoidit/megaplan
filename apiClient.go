@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"runtime"
+	"strconv"
 	"time"
 )
 
@@ -167,6 +168,19 @@ func OptionSetClientHTTP(client *http.Client) ClientOption {
 	return func(c *ClientV3) {
 		if client != nil {
 			c.client = client
+		}
+	}
+}
+
+// OptionSetXUserID - добавить заголовок "X-User-Id" - запросы будут выполнятся от имени указанного пользователя.
+// Если передано значение <= 0, то заголовок будет удален
+func OptionSetXUserID(userID int) ClientOption {
+	const header = "X-User-Id"
+	return func(c *ClientV3) {
+		if userID > 0 {
+			c.defaultHeaders.Set(header, strconv.Itoa(userID))
+		} else {
+			c.defaultHeaders.Del(header)
 		}
 	}
 }

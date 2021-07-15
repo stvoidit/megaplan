@@ -27,3 +27,10 @@ func (qp QueryParams) ToReader() (io.Reader, error) {
 	}
 	return bytes.NewReader(b), nil
 }
+
+// PrettyPrintJSON - SetIndent для читабельного вывода
+func (qp QueryParams) PrettyPrintJSON(w io.Writer) error {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "\t")
+	return enc.Encode(qp)
+}
