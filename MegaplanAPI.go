@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"runtime"
 	"strings"
+	"time"
 )
 
 // Response - структура стандартного ответа API
@@ -23,18 +25,15 @@ type Response struct {
 // ExpectedResponse - оборачивает ожидаемый ответ в стандартную структуру.
 // Ожидаемый интерфейс будет находиться в поле Response.Data.
 // После обработки необходимо сделать assert вложенного интерфейса к ожидаемому (см. примеры)
-func ExpectedResponse(data interface{}) *Response {
-	return &Response{Data: data}
-}
+func ExpectedResponse(data interface{}) *Response { return &Response{Data: data} }
 
 // API - Структура объекта API v1
 type API struct {
-	accessID  string
-	secretKey []byte
-	domain    string
-	appUUID   string
-	appSecret []byte
-	client    *http.Client
+	accessID   string
+	secretKey  []byte
+	domain     string
+	enablegzip bool
+	client     *http.Client
 }
 
 // SaveToken - сохранить конфигурацию в json
@@ -47,9 +46,7 @@ func (api API) SaveToken(filename string) error {
 	return json.NewEncoder(w).Encode(map[string]string{
 		"accessID":  api.accessID,
 		"secretKey": string(api.secretKey),
-		"domain":    api.domain,
-		"appUUID":   api.appUUID,
-		"appSecret": string(api.appSecret)})
+		"domain":    api.domain})
 }
 
 // accessToken - структура ответа с токеном доступа
@@ -71,28 +68,34 @@ type otcData struct {
 	} `json:"data"`
 }
 
+// http.Client по умолчанию
+var defaultClient = http.Client{
+	Transport: &http.Transport{
+		TLSHandshakeTimeout: 15 * time.Second,
+		MaxIdleConns:        0,
+		MaxIdleConnsPerHost: runtime.NumCPU(),
+		IdleConnTimeout:     time.Minute,
+		ForceAttemptHTTP2:   true,
+		ReadBufferSize:      256 << 10,
+		WriteBufferSize:     256 << 10,
+	},
+	Timeout: time.Minute * 10}
+
 // NewAPI - новый экземпляр api
-func NewAPI(accessID, secretKey, domain, appUUID, appSecret string) *API {
+func NewAPI(accessID, secretKey, domain string) *API {
+	var c = defaultClient
 	return &API{
-		client:    http.DefaultClient,
 		accessID:  accessID,
 		secretKey: []byte(secretKey),
 		domain:    domain,
-		appUUID:   appUUID,
-		appSecret: []byte(appSecret),
-	}
+		client:    &c}
 }
 
-// SetCustomClient - установить свой http.Client для API
-func (api *API) SetCustomClient(c *http.Client) {
-	api.client = c
-}
+// SetHTTPClient - установить свой http.Client для API
+func (api *API) SetHTTPClient(c *http.Client) { api.client = c }
 
-// SetEmbeddedApplication - установить ключ от встроенного приложения
-func (api *API) SetEmbeddedApplication(appuuid, appsecret string) {
-	api.appUUID = appuuid
-	api.secretKey = []byte(appsecret)
-}
+// EnableCompression - добавлять заголово "Accept-Encoding: gzip", http.Response.Body будет автоматически обработан
+func (api *API) EnableCompression(b bool) { api.enablegzip = b }
 
 // md5Passord - хэшируем пароль в md5
 func md5Passord(p string) string {

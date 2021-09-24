@@ -28,7 +28,7 @@ func getToken() (api *megaplan.API) {
 
 // пример раоты с GET запросом
 func exampleGET(api *megaplan.API) {
-	payload := map[string]interface{}{"Id": 1000005}
+	payload := megaplan.Payload{"Id": 1000005}
 	response, err := api.GET("/BumsStaffApiV01/Employee/card.api", payload)
 	if err != nil {
 		panic(err)
@@ -42,7 +42,7 @@ func exampleGET(api *megaplan.API) {
 
 // пример работы с POST запросом
 func examplePOST(api *megaplan.API) {
-	payload := map[string]interface{}{
+	payload := megaplan.Payload{
 		"SubjectType": "task",
 		"SubjectId":   1017226,
 		"Model[Text]": "test api v1 message"}
@@ -92,7 +92,7 @@ func main() {
 	}
 	{
 		// примеры использования
-		var api = megaplan.NewAPI(accessID, secretKey, myhost, "", "")
+		var api = megaplan.NewAPI(accessID, secretKey, myhost)
 		exampleGET(api)
 		examplePOST(api)
 		exampleParse(api)
