@@ -15,7 +15,7 @@ https://dev.megaplan.ru/r1905/api/index.html
 
 Пример использования:
 
-    var api = megaplan.NewAPI(accessID, secretKey, myhost, "", "")
+    var api = megaplan.NewAPI(accessID, secretKey, myhost)
     response, err := api.GET("/BumsCommonApiV01/UserInfo/id.api", nil)
 	if err != nil {
 		panic(err)
