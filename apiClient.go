@@ -3,52 +3,54 @@ package megaplan
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/rand"
 	"crypto/tls"
 	"errors"
 	"io"
 	"net"
 	"net/http"
-	"net/http/cookiejar"
 	"runtime"
 	"strconv"
 	"time"
+)
+
+// DefaultClient - клиент по умаолчанию для API.
+var (
+	DefaultClient = &http.Client{
+		Transport: &http.Transport{
+			Proxy: http.ProxyFromEnvironment,
+			TLSClientConfig: &tls.Config{
+				MinVersion: tls.VersionTLS12,
+				MaxVersion: tls.VersionTLS13,
+				Rand:       rand.Reader,
+				Time:       time.Now,
+			},
+			DialContext: (&net.Dialer{
+				Timeout:   time.Minute,
+				KeepAlive: time.Minute,
+			}).DialContext,
+			TLSHandshakeTimeout: 30 * time.Second,
+			MaxIdleConns:        0,
+			IdleConnTimeout:     time.Minute,
+			ForceAttemptHTTP2:   true,
+			ReadBufferSize:      256 << 10,
+			WriteBufferSize:     256 << 10,
+		},
+		Timeout: time.Minute,
+	}
+	// DefaultHeaders - заголовок по умолчанию - версия go. Используется при инициализации клиента в NewClient.
+	DefaultHeaders = http.Header{"User-Agent": {runtime.Version()}}
 )
 
 // NewClient - обертка над http.Client для удобной работы с API v3
 func NewClient(domain, token string, opts ...ClientOption) (c *ClientV3) {
 	// обмен трафиком идёт очень активный, поэтому целесообразно использовать http2 + KeepAlive
 	// бэкэнд мегаплана корректно умеет работать с http и KeepAlive, что экономит время и ресурсы на соединение
-	var idleCount = runtime.NumCPU() // по умолчанию 2, поэтому желательно увеличить до оптимального кол-ва
-	var tr = &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
-		TLSClientConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
-			MaxVersion: tls.VersionTLS13,
-			Rand:       rand.Reader,
-			Time:       time.Now,
-		},
-		DialContext: (&net.Dialer{
-			Timeout:   time.Minute * 10,
-			KeepAlive: time.Minute,
-		}).DialContext,
-		TLSHandshakeTimeout: 30 * time.Second,
-		MaxIdleConns:        idleCount,
-		MaxIdleConnsPerHost: idleCount,
-		IdleConnTimeout:     time.Minute,
-		ForceAttemptHTTP2:   true,
-		ReadBufferSize:      256 << 10,
-		WriteBufferSize:     256 << 10,
-	}
-	var jar, _ = cookiejar.New(nil)
 	c = &ClientV3{
-		client: &http.Client{
-			Transport: tr,
-			Jar:       jar,
-			Timeout:   time.Minute * 10,
-		},
+		client:         DefaultClient,
 		domain:         domain,
-		defaultHeaders: http.Header{"User-Agent": {runtime.Version()}},
+		defaultHeaders: DefaultHeaders,
 	}
 	c.SetToken(token)
 	c.SetOptions(opts...)
@@ -93,6 +95,25 @@ func (c ClientV3) DoRequestAPI(method string, endpoint string, search QueryParam
 	return unzipResponse(response)
 }
 
+// DoRequestAPI - т.к. в v3 параметры запроса для GET (json маршализируется и будет иметь вид: "*?{params}=")
+func (c ClientV3) DoCtxRequestAPI(ctx context.Context, method string, endpoint string, search QueryParams, body io.Reader) (rc io.ReadCloser, err error) {
+	var args string // параметры строки запроса
+	if search != nil {
+		args = search.QueryEscape()
+	}
+	request, err := http.NewRequestWithContext(ctx, method, c.domain, body)
+	if err != nil {
+		return nil, err
+	}
+	request.URL.Path = endpoint
+	request.URL.RawQuery = args
+	response, err := c.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	return unzipResponse(response)
+}
+
 // ErrUnknownCompressionMethod - неизвестное значение в заголовке "Content-Encoding"
 // не является фатальной ошибкой, должна возвращаться вместе с http.Response.Body,
 // чтобы пользователь мог реализовать свой метод обработки сжатого сообщения
@@ -111,8 +132,7 @@ func unzipResponse(response *http.Response) (rc io.ReadCloser, err error) {
 		return nil, err
 	}
 	var r = bytes.NewReader(body)
-	ce := response.Header.Get("Content-Encoding")
-	switch ce {
+	switch response.Header.Get("Content-Encoding") {
 	case "":
 		// кейс, когда запрашивалось сжатие, но сервер не поддерживает запрашиваемый вид сжатия
 		// response.Uncompressed будет в значении false, но в тело ответа будет не сжато и заголовок "Content-Encoding" отсутствует
