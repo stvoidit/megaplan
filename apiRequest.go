@@ -88,10 +88,9 @@ func SetRawField(field string, value interface{}) QueryBuildingFunc {
 }
 
 // UploadFile - загрузка файла, возвращает обычный http.Response, в ответе стандартная структура ответа + данные для базовой сущности
-func (c *ClientV3) UploadFile(filename string, fileRader io.Reader) (io.ReadCloser, error) {
-	var buf = bytes.NewBuffer(nil) // default 1024 bytes buffer
-	defer buf.Reset()
-	var mw = multipart.NewWriter(buf)
+func (c *ClientV3) UploadFile(filename string, fileRader io.Reader) (*http.Response, error) {
+	var buf bytes.Buffer // default 1024 bytes buffer
+	var mw = multipart.NewWriter(&buf)
 	fw, err := mw.CreateFormFile("files[]", filename)
 	if err != nil {
 		return nil, err
@@ -102,15 +101,11 @@ func (c *ClientV3) UploadFile(filename string, fileRader io.Reader) (io.ReadClos
 	if err := mw.Close(); err != nil {
 		return nil, err
 	}
-	request, err := http.NewRequest(http.MethodPost, c.domain, buf)
+	request, err := http.NewRequest(http.MethodPost, c.domain, &buf)
 	if err != nil {
 		return nil, err
 	}
 	request.URL.Path = "/api/file"
 	request.Header.Set("Content-Type", mw.FormDataContentType())
-	response, err := c.Do(request)
-	if err != nil {
-		return nil, err
-	}
-	return unzipResponse(response)
+	return c.Do(request)
 }

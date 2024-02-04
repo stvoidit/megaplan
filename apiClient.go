@@ -4,11 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/rand"
-	"crypto/tls"
 	"errors"
 	"io"
-	"net"
 	"net/http"
 	"runtime"
 	"strconv"
@@ -20,22 +17,6 @@ var (
 	DefaultClient = &http.Client{
 		Transport: &http.Transport{
 			Proxy: http.ProxyFromEnvironment,
-			TLSClientConfig: &tls.Config{
-				MinVersion: tls.VersionTLS12,
-				MaxVersion: tls.VersionTLS13,
-				Rand:       rand.Reader,
-				Time:       time.Now,
-			},
-			DialContext: (&net.Dialer{
-				Timeout:   time.Minute,
-				KeepAlive: time.Minute,
-			}).DialContext,
-			TLSHandshakeTimeout: 30 * time.Second,
-			MaxIdleConns:        0,
-			IdleConnTimeout:     time.Minute,
-			ForceAttemptHTTP2:   true,
-			ReadBufferSize:      256 << 10,
-			WriteBufferSize:     256 << 10,
 		},
 		Timeout: time.Minute,
 	}
@@ -45,8 +26,6 @@ var (
 
 // NewClient - обертка над http.Client для удобной работы с API v3
 func NewClient(domain, token string, opts ...ClientOption) (c *ClientV3) {
-	// обмен трафиком идёт очень активный, поэтому целесообразно использовать http2 + KeepAlive
-	// бэкэнд мегаплана корректно умеет работать с http и KeepAlive, что экономит время и ресурсы на соединение
 	c = &ClientV3{
 		client:         DefaultClient,
 		domain:         domain,
@@ -64,7 +43,7 @@ type ClientV3 struct {
 	defaultHeaders http.Header
 }
 
-// Do - http.Do + установка обязательных заголовков
+// Do - http.Do + установка обязательных заголовков + декомпрессия ответа, если ответ сжат
 func (c *ClientV3) Do(req *http.Request) (*http.Response, error) {
 	const ct = "Content-Type"
 	for h := range c.defaultHeaders {
@@ -73,11 +52,18 @@ func (c *ClientV3) Do(req *http.Request) (*http.Response, error) {
 	if req.Header.Get(ct) == "" {
 		req.Header.Set(ct, "application/json")
 	}
-	return c.client.Do(req)
+	res, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if err := unzipResponse(res); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 // DoRequestAPI - т.к. в v3 параметры запроса для GET (json маршализируется и будет иметь вид: "*?{params}=")
-func (c ClientV3) DoRequestAPI(method string, endpoint string, search QueryParams, body io.Reader) (rc io.ReadCloser, err error) {
+func (c ClientV3) DoRequestAPI(method string, endpoint string, search QueryParams, body io.Reader) (*http.Response, error) {
 	var args string // параметры строки запроса
 	if search != nil {
 		args = search.QueryEscape()
@@ -88,15 +74,11 @@ func (c ClientV3) DoRequestAPI(method string, endpoint string, search QueryParam
 	}
 	request.URL.Path = endpoint
 	request.URL.RawQuery = args
-	response, err := c.Do(request)
-	if err != nil {
-		return nil, err
-	}
-	return unzipResponse(response)
+	return c.Do(request)
 }
 
 // DoRequestAPI - т.к. в v3 параметры запроса для GET (json маршализируется и будет иметь вид: "*?{params}=")
-func (c ClientV3) DoCtxRequestAPI(ctx context.Context, method string, endpoint string, search QueryParams, body io.Reader) (rc io.ReadCloser, err error) {
+func (c ClientV3) DoCtxRequestAPI(ctx context.Context, method string, endpoint string, search QueryParams, body io.Reader) (*http.Response, error) {
 	var args string // параметры строки запроса
 	if search != nil {
 		args = search.QueryEscape()
@@ -107,11 +89,7 @@ func (c ClientV3) DoCtxRequestAPI(ctx context.Context, method string, endpoint s
 	}
 	request.URL.Path = endpoint
 	request.URL.RawQuery = args
-	response, err := c.Do(request)
-	if err != nil {
-		return nil, err
-	}
-	return unzipResponse(response)
+	return c.Do(request)
 }
 
 // ErrUnknownCompressionMethod - неизвестное значение в заголовке "Content-Encoding"
@@ -120,30 +98,35 @@ func (c ClientV3) DoCtxRequestAPI(ctx context.Context, method string, endpoint s
 var ErrUnknownCompressionMethod = errors.New("unknown compression method")
 
 // unzipResponse - распаковка сжатого ответа
-func unzipResponse(response *http.Response) (rc io.ReadCloser, err error) {
+func unzipResponse(response *http.Response) (err error) {
 	if response.Uncompressed {
-		return response.Body, nil
+		return nil
 	}
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		return nil, err
-	}
-	if err := response.Body.Close(); err != nil {
-		return nil, err
-	}
-	var r = bytes.NewReader(body)
 	switch response.Header.Get("Content-Encoding") {
 	case "":
-		// кейс, когда запрашивалось сжатие, но сервер не поддерживает запрашиваемый вид сжатия
-		// response.Uncompressed будет в значении false, но в тело ответа будет не сжато и заголовок "Content-Encoding" отсутствует
-		rc = io.NopCloser(r)
+		return nil
 	case "gzip":
-		rc, err = gzip.NewReader(r)
+		gz, err := gzip.NewReader(response.Body)
+		if err != nil {
+			return err
+		}
+		b, err := io.ReadAll(gz)
+		if err != nil {
+			return err
+		}
+		if err := response.Body.Close(); err != nil {
+			return err
+		}
+		if err := gz.Close(); err != nil {
+			return err
+		}
+		response.Body = io.NopCloser(bytes.NewReader(b))
+		response.Header.Del("Content-Encoding")
+		response.Uncompressed = true
+		return nil
 	default:
-		rc = io.NopCloser(r)
-		err = ErrUnknownCompressionMethod
+		return ErrUnknownCompressionMethod
 	}
-	return
 }
 
 // SetOptions - применить опции
