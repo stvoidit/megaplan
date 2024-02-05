@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net/http"
@@ -14,9 +15,13 @@ import (
 
 // DefaultClient - клиент по умаолчанию для API.
 var (
+	cpus          = runtime.NumCPU()
 	DefaultClient = &http.Client{
 		Transport: &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
+			Proxy:               http.ProxyFromEnvironment,
+			MaxIdleConns:        cpus,
+			MaxConnsPerHost:     cpus,
+			MaxIdleConnsPerHost: cpus,
 		},
 		Timeout: time.Minute,
 	}
@@ -147,7 +152,11 @@ type ClientOption func(*ClientV3)
 func OptionInsecureSkipVerify(b bool) ClientOption {
 	return func(c *ClientV3) {
 		if c.client.Transport != nil {
-			(c.client.Transport.(*http.Transport)).TLSClientConfig.InsecureSkipVerify = b
+			if (c.client.Transport.(*http.Transport)).TLSClientConfig == nil {
+				(c.client.Transport.(*http.Transport)).TLSClientConfig = &tls.Config{InsecureSkipVerify: b}
+			} else {
+				(c.client.Transport.(*http.Transport)).TLSClientConfig.InsecureSkipVerify = b
+			}
 		}
 	}
 }
